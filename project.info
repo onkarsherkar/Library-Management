@@ -1,0 +1,21 @@
+Build a simple Book Library application using DRF keeping in mind following constraints.
+
+Library consists of N number of Books.
+Every Book has following attributes
+Title
+Author
+Genre
+Library has a membership system.
+A member can search for books by author and/or genre.
+A member can request a book from the library and library based on availability can issue the book to the member for N days.
+When a book is issued track who it was issued by, when it was issued and for how many days.
+Librarians can retrieve a list of available books as and when needed.
+Librarians can get records of all the books issues along with whom it was issued to and when they were/are to be returned. [You can also put in date filters]
+Finally, allow librarians to download a simple list of all the books issued in a CSV file. It should have the following columns.
+Book Title
+Book Author
+Member Name
+Date Of Issue
+Date of Return
+
+Please note that every piece of code must be documented using Python’s documentation style and it also must include test cases. 
