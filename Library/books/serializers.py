@@ -1,6 +1,7 @@
 from django.db.models import fields
+from django.db.models.base import Model
 from rest_framework import serializers
-from .models import CustomUser
+from .models import CustomUser,Author,Genre
 from rest_framework.validators import UniqueValidator
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -36,3 +37,14 @@ class LoginSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
         fields = ('username', 'password')
+
+class AuthorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Author
+        fields = '__all__'
+
+class GenreSerizlizer(serializers.ModelSerializer):
+    class Meta:
+        model = Genre
+        fields = '__all__'
+
