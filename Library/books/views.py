@@ -2,9 +2,9 @@ from django.http.response import JsonResponse
 from django.shortcuts import render
 from django.http.response import JsonResponse,HttpResponse
 from rest_framework import permissions, serializers
-from .serializers import RegisterSerializer,LoginSerializer,AuthorSerializer,GenreSerizlizer
+from .serializers import RegisterSerializer,LoginSerializer,AuthorSerializer,GenreSerializer
 from rest_framework import generics
-from .models import CustomUser,Author
+from .models import CustomUser,Author,Genre
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -149,4 +149,47 @@ class AuthorEditView(APIView):
         return Response(status=status.HTTP_202_ACCEPTED)
 
 class GenreView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self,request):
+        genre = Genre.objects.all()
+        serializer = GenreSerializer(genre,many=True)
+        return Response(serializer.data)
+
+    def post(self,request):
+        serializer = GenreSerializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data,status=status.HTTP_201_CREATED)
+        return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+
+class GenreEditView(APIView):
+    permission_classes = [IsAdminUser]
+    def get_object(self,id):
+        try:
+            genre = Genre.objects.get(id=id)
+            return genre
+        except Genre.DoesNotExist:
+            return HttpResponse(status=404)
+
+    def get(self,request,id):
+        genre = self.get_object(id)
+        serializer = GenreSerializer(genre)
+        return Response(serializer.data)
+
+    def put(self,request,id):
+        genre = self.get_object(id)
+        serializer = GenreSerializer(genre,data=request.data) 
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data,status=status.HTTP_202_ACCEPTED)
+        return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self,request,id):
+        genre = self.get_object(id)
+        genre.delete()
+        return Response(status=status.HTTP_202_ACCEPTED)
+
+class BookView(APIView):
     pass

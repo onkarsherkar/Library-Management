@@ -8,5 +8,7 @@ urlpatterns = [
     path('logout',views.LogoutView.as_view(),name='logout'),
     path('author',views.AuthorView.as_view(),name='author'),
     path('author/<int:id>',views.AuthorEditView.as_view(),name='author_edit'),
+    path('genre',views.GenreView.as_view(),name='genre'),
+     path('genre/<int:id>',views.GenreEditView.as_view(),name='genre_edit'),
     
 ]
