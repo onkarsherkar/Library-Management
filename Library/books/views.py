@@ -1,10 +1,12 @@
+from django.db.models.fields import DateTimeField
 from django.http.response import JsonResponse
 from django.shortcuts import render
 from django.http.response import JsonResponse,HttpResponse
 from rest_framework import permissions, serializers
-from .serializers import BookIssueSerializer, GetBookSerializer,RoleSerializer, RegisterSerializer, RegisterMemberSerializer, EditUserSerializer, LoginSerializer, AuthorSerializer,GenreSerializer, BookSerializer, BookSearchByAuthorSerializer, BookSearchByGenreSerializer
+from .serializers import BookIssueSerializer, BookRequestSerializer, GetBookSerializer,RoleSerializer, RegisterSerializer, RegisterMemberSerializer, EditUserSerializer, LoginSerializer, AuthorSerializer,GenreSerializer, BookSerializer, BookSearchByAuthorSerializer, BookSearchByGenreSerializer, BookRequestTypeSerializer, \
+BookRequestSerializer, BookRequestAddEditSerializer
 from rest_framework import generics
-from .models import CustomUser,Author,Genre, Book, Role, Book_issue
+from .models import Book_request, CustomUser,Author,Genre, Book, Role, Book_request_log, Book_request_type
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -16,6 +18,8 @@ from datetime import date,datetime
 from rest_framework import viewsets
 from django.db.models import Q
 import csv
+from django.utils import timezone
+import pytz
 
 
 # Create your views here.
@@ -55,15 +59,22 @@ class IsAnonymous(BasePermission):
 """
     API starts from here
 """
+
+# Test api
 def test(request):
     return JsonResponse({'test':'OK'})
 
+#  Creat and display system role (Librarian,Member)
 class RoleView(APIView):
     serializer_class = RoleSerializer
     permission_classes = [IsAdminUser|IsLibrarian]
 
     def get(self, request):
-        roles = Role.objects.all()
+        type_name = str(request.user.type)
+        if type_name == 'Librarian':
+            roles = Role.objects.filter(~Q(name='Librarian'))
+        else:
+            roles = Role.objects.all()
         serializer = RoleSerializer(roles,many=True)
         return Response(serializer.data)
 
@@ -75,6 +86,66 @@ class RoleView(APIView):
 
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)          
  
+# Modify Delete exisiting role 
+class RoleEditView(APIView):
+    
+    serializer_class = RoleSerializer
+    permission_classes = [IsAdminUser|IsLibrarian]
+
+    def get_object(self,id,type_name):
+        try:
+            role = Role.objects.get(id=id)
+            if type_name == 'Librarian' and role.name == "Librarian":
+                return 'Not access'
+            return role
+
+        except:
+            return None
+
+    def get(self,request,id):
+        type_name = str(request.user.type)
+        role = self.get_object(id,type_name)
+
+        if role == 'Not access':
+            return Response({'error':'You do not have access'},status=status.HTTP_401_UNAUTHORIZED)
+
+        if role:
+            serializer = RoleSerializer(role)
+            return Response(serializer.data)
+
+        return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
+    def put(self,request,id):
+        type_name = str(request.user.type)
+        role = self.get_object(id,type_name)
+
+        if role == 'Not access':
+            return Response({'error':'You do not have access'},status=status.HTTP_401_UNAUTHORIZED)
+
+        if role:
+            if "name" in request.data:
+                if self.request.data['name'] != "":
+                    role.name = request.data['name']
+                    role.save()
+                    return Response(request.data,status=status.HTTP_202_ACCEPTED)
+
+                return Response({'error':'Field is empty'},status=status.HTTP_406_NOT_ACCEPTABLE)
+
+            return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self,request,id):
+        type_name = str(request.user.type)
+        role = self.get_object(id,type_name)
+
+        if role == 'Not access':
+            return Response({'error':'You do not have access'},status=status.HTTP_401_UNAUTHORIZED)
+
+        if role:
+            role.delete()
+            return Response(request.data,status=status.HTTP_202_ACCEPTED)
+
+        return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
 class RegisterView(APIView):
     
     serializer_class = RegisterSerializer
@@ -103,7 +174,8 @@ class RegisterView(APIView):
             serializer.save()
             return Response(serializer.data,status=status.HTTP_201_CREATED)
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
-        
+
+# Display exisiting user and register new user
 class RegisterNewView(viewsets.ModelViewSet):
     permission_classes = [IsAdminUser|IsLibrarian]
 
@@ -166,6 +238,7 @@ class LogoutView(APIView):
         logout(request)
         return Response({'data':'logout Successfully..'},status=status.HTTP_200_OK)
 
+# Modify, Delete exisiting user
 class EditUserView(APIView):
     permission_classes = [IsAdminUser|IsLibrarian]
     serializer_class = EditUserSerializer
@@ -226,8 +299,9 @@ class EditUserView(APIView):
 
         return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
 
+# Add book Auther
 class AuthorView(APIView):
-    permission_classes = [IsAdminUser|IsLibrarian]
+    permission_classes = [IsLibrarian]
     serializer_class = AuthorSerializer
 
     def get(self,request):
@@ -244,8 +318,9 @@ class AuthorView(APIView):
 
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
 
+# Modify,Delete exisiting author
 class AuthorEditView(APIView):
-    permission_classes = [IsAdminUser|IsLibrarian]
+    permission_classes = [IsLibrarian]
     serializer_class = AuthorSerializer
 
     def get_object(self,id):
@@ -284,8 +359,9 @@ class AuthorEditView(APIView):
 
         return Response({'error':'No data Found'})
 
+# Add diffrent genre
 class GenreView(APIView):
-    permission_classes = [IsAdminUser|IsLibrarian]
+    permission_classes = [IsLibrarian]
     serializer_class = GenreSerializer
 
     def get(self,request):
@@ -302,8 +378,9 @@ class GenreView(APIView):
 
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
 
+# Modify,Delete genre
 class GenreEditView(APIView):
-    permission_classes = [IsAdminUser|IsLibrarian]
+    permission_classes = [IsLibrarian]
     serializer_class = GenreSerializer
 
     def get_object(self,id):
@@ -342,6 +419,7 @@ class GenreEditView(APIView):
 
         return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
 
+# Add new Books
 class BookView(APIView):
     permission_classes = [IsAdminUser|IsLibrarian]
     serializer_class = BookSerializer
@@ -360,6 +438,7 @@ class BookView(APIView):
 
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
 
+# Modify,Delete exisiting book
 class BookEditView(APIView):
     permission_classes = [IsAdminUser|IsLibrarian]
     serializer_class = BookSerializer
@@ -400,6 +479,7 @@ class BookEditView(APIView):
 
         return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
 
+# Book search by author
 class BookSearchByAuthor(APIView):
     permission_classes = [IsAdminUser|IsLibrarian|IsMember]
     serializer_class = BookSearchByAuthorSerializer
@@ -421,6 +501,7 @@ class BookSearchByAuthor(APIView):
 
         return Response({'details':'No data found'},status=status.HTTP_404_NOT_FOUND)
 
+# Book search by genre
 class BookSearchByGenre(APIView):
     permission_classes = [IsAdminUser|IsLibrarian|IsMember]
     serializer_class = BookSearchByGenreSerializer
@@ -442,43 +523,251 @@ class BookSearchByGenre(APIView):
 
         return Response({'details':'No data found'},status=status.HTTP_404_NOT_FOUND)
 
+# Add Book request type(Issue,Return,Lost)
+class BookRequestTypeView(APIView):
+    permission_classes = [IsLibrarian]
+    serializer_class = BookRequestTypeSerializer
+
+    def get(self,request):
+        request_type = Book_request_type.objects.all()
+        serializer = BookRequestTypeSerializer(request_type,many=True)
+        return Response(serializer.data,status=status.HTTP_302_FOUND)
+
+    def post(self,request):
+        serializer = BookRequestTypeSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data,status=status.HTTP_202_ACCEPTED)
+
+        return Response(serializer.error_messages,status=status.HTTP_406_NOT_ACCEPTABLE)
+
+# Modify,Delete Book request type
+class BookRequestTypeEditView(APIView):
+    permission_classes = [IsLibrarian]
+    serializer_class = BookRequestTypeSerializer
+
+    def get_object(self,id):
+        try:
+            book = Book_request_type.objects.get(id=id)
+            return book
+
+        except:
+            return None
+
+    def get(self,request,id):
+        request_type = self.get_object(id)
+        if request_type:
+            serializer = BookRequestTypeSerializer(request_type)
+            return Response(serializer.data)
+
+        return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
+    def put(self,request,id):
+        request_type = self.get_object(id)
+        if request_type:
+            serializer = BookRequestTypeSerializer(request_type,data=request.data) 
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data,status=status.HTTP_202_ACCEPTED)
+
+            return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self,request,id):
+        request_type = self.get_object(id)
+        if request_type:
+            request_type.delete()
+            return Response(request.data,status=status.HTTP_202_ACCEPTED)
+
+        return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
+# Display available books and search by author,genre
 class AvailableBookView(APIView):
     permission_classes = [IsAdminUser|IsLibrarian|IsMember]
     serializer_class = GetBookSerializer
 
+   
     def get(self,request):
-        books = Book.objects.filter(is_issued=False)
+        books = Book.objects.filter(no_copy__gt=0)
         serializer = GetBookSerializer(books,many=True)
         return Response(serializer.data,status=status.HTTP_200_OK)
 
     def post(self,request):
-        serializer =GetBookSerializer(data=request.data)
-        if serializer.is_valid():
             
-            user = request.user
-            try:
-                book = Book.objects.get(title=request.data['title'])
-                if user.issued_book < 2:
-                    user.issued_book +=1
-                    user.save()
-                    book.is_issued = True
-                    book.save()
-                    book_issued= Book_issue(book=book,date_issue=request.data['issue_date'],
-                        date_return = request.data['return_date'],user=user
+        user = request.user
+        try:
+            book = Book.objects.get(title=request.data['title'])
+            if user.issued_book < 2:
+                if book.no_copy > 0:
+                    
+                    type = Book_request_type.objects.get(request_name="Issue")
+
+                    request_check = Book_request.objects.filter(book=book,user=user,type=type)
+                    issue_check = Book_request_log.objects.filter(book=book,user=user,type=type)
+
+                    if request_check:
+                        return Response({'details':'You alerady make the request for the book'},status=status.HTTP_208_ALREADY_REPORTED)
+                        
+                    if issue_check:
+                        return Response({'details':'You alerady issued the book'},status=status.HTTP_208_ALREADY_REPORTED)
+
+                    book_request= Book_request(book=book,date_issue=request.data['issue_date'],
+                        date_return = request.data['return_date'],user=user, type=type
                     )
-                    book_issued.save()
+                    book_request.save()
                     return Response({'msg':'success'},status=status.HTTP_202_ACCEPTED)
 
-                return Response({'error':'Already reach maximum number of isseud book.Please return issued book and try again'},status=status.HTTP_412_PRECONDITION_FAILED)
+                return Response({'error':'Book copy is not available try again'},status=status.HTTP_412_PRECONDITION_FAILED)
 
-            except Exception as e:
-                print(e)
-                return Response({'error':'Book not available'},status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error':'Already reach maximum number of isseud book.Please return issued book and try again'},status=status.HTTP_412_PRECONDITION_FAILED)
+
+        except Exception as e:
+            print('Error',e.args)
+            return Response({'error':'Book not available'},status=status.HTTP_400_BAD_REQUEST)
             
-        return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+# Display all the request made by user           
+class BookRequestView(APIView):
+    permission_classes = [IsLibrarian]
+    serializer_class = BookRequestSerializer
 
+    # Display all the request made by users
+    def get(self,request):
+        try:
+            requests = Book_request.objects.all()
+            serializer = BookRequestSerializer(requests,many=True)
+            return Response(serializer.data,status=status.HTTP_302_FOUND)
+        except:
+            return Response({'error':'Please try again later'},status=status.HTTP_404_NOT_FOUND)
+
+    # Search the request by book,type and user
+    def post(self,request):
+        pass_data ={}
+        if "book" in request.data:
+            pass_data['book'] = request.data['book']
+        if "user" in request.data:
+            pass_data['user'] = request.data['user']
+        if "type" in request.data:
+            pass_data['type'] = request.data['type']
+            
+        book_requests = Book_request.objects.filter(**pass_data)
+        serializer = BookRequestSerializer(book_requests,many=True)
+        return Response({'details':serializer.data},status=status.HTTP_302_FOUND)
+
+        # serializer = BookRequestSerializer(data=request.data)
+        # if serializer.is_valid():
+        #     #serializer.save()
+        #     return Response(serializer.data,status=status.HTTP_202_ACCEPTED)
+
+        # return Response(serializer.error_messages,status=status.HTTP_406_NOT_ACCEPTABLE)
+
+# Modify, Delete the request
+class BookRequestAddEditView(APIView):
+    permission_classes = [IsLibrarian]
+    serializer_class = BookRequestAddEditSerializer
+
+    def get_object(self,id):
+        try:
+            request_info = Book_request.objects.get(id=id)
+            return request_info
+        except:
+            return None
+
+    def get(self,request,id):
+        request_info = self.get_object(id)
+        if request_info:
+            serializer = BookRequestSerializer(request_info)
+            return Response(serializer.data)
+
+        return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
+    def put(self,request,id):
+        request_info = self.get_object(id)
+        if request_info:
+
+            if request.data['book'] == str(request_info.book.id) \
+                and request.data['user'] == str(request_info.user.id) and request.data['type'] == str(request_info.type.id)\
+                and request.data['date_issue'] != '' and request.data['date_return'] != '' :
+
+                try:                
+                    
+                    msg =""
+                    user = request_info.user
+                    book = Book.objects.get(id=request_info.book.id)
+
+                    if request_info.type.request_name == 'Issue':
+                        book_request = Book_request_log(
+                            book=request_info.book,
+                            date_issue=request.data['date_issue'],
+                            expected_date_return=request.data['date_return'],
+                            user=request_info.user
+                        )
+                        book.no_copy -=1
+                        user.issued_book +=1 
+                        book_request.type = request_info.type
+                        book_request.save()
+                        request_info.delete()
+                        msg = "Book issued successfully."
+
+                    if request_info.type.request_name == "Return":
+                        book_request = Book_request_log.objects.get(book=book,user=user)
+                        book.no_copy += 1
+                        user.issued_book -= 1
+                        today = date.today()
+                        price = (today-book_request.expected_date_return)
+
+                        if price.days > 0:
+                            charge = 10 * price.days
+                            book_request.charge = charge
+                        book_request.type = request_info.type
+                        book_request.actual_date_return = request_info.return_lost_request_date
+                        book_request.save()
+                        request_info.delete()
+                        msg = "Book Return successfully."
+
+                    
+                    if request_info.type.request_name == "Lost":
+                        book_request = Book_request_log.objects.get(book=book,user=user)
+                        user.issued_book -= 1
+                        today = date.today()
+                        price = (today-book_request.expected_date_return)
+
+                        if price.days > 0:
+                            charge = 10 * price.days
+                            book_request.charge = charge
+                        book_request.charge += book_request.book.price
+                        book_request.type = request_info.type
+                        book_request.actual_date_return = request_info.return_lost_request_date
+                        book_request.save()
+                        request_info.delete()
+                        msg = "Book is Lost and total amount paid."
+                        
+
+                    book.save()
+                    user.save()
+                    
+                    return Response({'detail':msg},status=status.HTTP_202_ACCEPTED)
+
+                except Exception as e:
+                    print(e)
+                    return Response({'error':'Request Type is wrong'},status=status.HTTP_400_BAD_REQUEST)       
+
+            return Response({'error':'data is miss match'},status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'error':'No Request Found'},status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self,request,id):
+        try:
+            request_info = self.get_object(id)
+            request_info.delete()
+            return Response(request_info,status=status.HTTP_202_ACCEPTED)
+        except Exception as e:
+            print(e)
+            return Response({'error':'Request Not Found'},status=status.HTTP_404_NOT_FOUND)
+
+#  Get the csv of issued book
 class IssuedBookView(APIView):
-    permission_classes = [IsAdminUser|IsLibrarian]
+    permission_classes = [IsLibrarian]
     
     # def get(self,request):
     #     books = Book_issue.objects.all()
@@ -486,18 +775,19 @@ class IssuedBookView(APIView):
     #     return Response(serializer.data)
 
     def get(self, request):
-        books = Book_issue.objects.all()
+        books =Book_request_log.objects.all()
         response = HttpResponse(content_type='text/csv')
         writer = csv.writer(response)
-        writer.writerow(['Book Title','Book Author','Member Name','Date Of Issue','Date of Return','is_return'])
+        writer.writerow(['Book Title','Book Author','Member Name','Date Of Issue','Date of Return','is_return','is_lost','charge'])
         if books:
-            for book in books.values_list('book__title','book__author__name','user__username','date_issue','date_return','is_return'):
+            for book in books.values_list('book__title','book__author__name','user__username','date_issue','date_return','is_return','is_lost','charge'):
                 writer.writerow(book)
             response['Content-Disposition'] = 'attachment; filename="book_issued.csv"'
             return response
         else:
             return Response({'details':'No Data Found'},status=status.HTTP_404_NOT_FOUND)
 
+# Display issued book according to user login and make the return request
 class ReturnBookView(APIView):
     permission_classes = [IsMember]
     serializer_class = BookIssueSerializer
@@ -519,34 +809,136 @@ class ReturnBookView(APIView):
             return None
 
     def get(self,request):
-        books = Book_issue.objects.filter(user=request.user,is_return=False)
+        books = Book_request_log.objects.filter(user=request.user,type__request_name='Issue')
         today = date.today()
         if books:
+            data_list=[]
             for data in books:
-                price = (today-data.date_return.date())
+                info = {}
+                price = (today-data.expected_date_return)
+                print(price.days)
+                charge = 0
                 if price.days > 0:
                     charge = 10 * price.days
-                    data.charge = charge
-                    data.save()
-
-            serializers = BookIssueSerializer(books,many=True)
-            return Response(serializers.data)
+                   
+                info['book_name'] = data.book.title
+                info['date_issue'] = data.date_issue
+                info['date_return'] = data.expected_date_return
+                info['user_name'] = data.user.username
+                info['price'] = charge
+                data_list.append(info)
+            
+            return Response(data_list,status=status.HTTP_302_FOUND)
 
         return Response({'detail':'There are no issue book.'},status=status.HTTP_404_NOT_FOUND)
 
     def post(self, request):
-        user = CustomUser.objects.get(username=request.user.username)
-        book = Book.objects.get(title=request.data['return_book_name'])
+        
         try:
-            book_user_check = Book_issue.objects.get(book=book,user=request.user,is_return=False)
-            book_user_check.is_return = True
-            user.issued_book -= 1
-            user.save()
-            book.is_issued = False
-            book.save()
-            book_user_check.date_return = datetime.now()
-            book_user_check.save()
-            return Response({'msg':'Book return successfully.'},status=status.HTTP_202_ACCEPTED)
+            user = CustomUser.objects.get(username=request.user.username)
+            book = Book.objects.get(title=request.data['return_book_name'])
+
+            book_request_return_check = Book_request.objects.filter(book=book,user=request.user,type__request_name='Return')
+            book_request_lost_check = Book_request.objects.filter(book=book,user=request.user,type__request_name='Lost')
+
+            if book_request_return_check:
+                return Response({'derails':'Book return request already present.'},status=status.HTTP_208_ALREADY_REPORTED)
+            
+            if book_request_lost_check:
+                return Response({'derails':'Book lost request already present.'},status=status.HTTP_208_ALREADY_REPORTED)
+
+            book_user_check = Book_request_log.objects.get(book=book,user=request.user,type__request_name='Issue')
+            type = Book_request_type.objects.get(request_name="Return")
+
+            today = date.today()
+            price = (today-book_user_check.expected_date_return)
+            charge = 0
+            if price.days > 0:
+                charge = 10 * price.days
+
+            return_request = Book_request(book=book,date_issue=book_user_check.date_issue,\
+                date_return=book_user_check.expected_date_return,return_lost_request_date=date.today(),\
+                    user=user,type=type,charge=charge)
+            return_request.save()
+            return Response({'msg':'Book return request sent successfully.'},status=status.HTTP_202_ACCEPTED)
+
+        except:
+            return Response({'error':'Book not Found.'},status=status.HTTP_404_NOT_FOUND)
+            
+# Display issued book according to user login and make the lost request
+class LostBookView(APIView):
+    permission_classes = [IsMember]
+    serializer_class = BookIssueSerializer
+
+    def get_object(self,book,user):
+        try:
+            user = CustomUser.objects.get(id=id)
+            if type == 'Librarian':
+                try:
+                    if user.type.name != "Member":
+                        return None
+
+                except:
+                    return None
+
+            return user
+
+        except CustomUser.DoesNotExist:
+            return None
+
+    def get(self,request):
+        books = Book_request_log.objects.filter(user=request.user,type__request_name='Issue')
+        today = date.today()
+        if books:
+            data_list=[]
+            for data in books:
+                info = {}
+                price = (today-data.expected_date_return)
+                print(price.days)
+                charge = data.book.price
+                if price.days > 0:
+                    charge += 10 * price.days
+                   
+                info['book_name'] = data.book.title
+                info['date_issue'] = data.date_issue
+                info['date_return'] = data.expected_date_return
+                info['user_name'] = data.user.username
+                info['price'] = charge
+                data_list.append(info)
+            
+            return Response(data_list,status=status.HTTP_302_FOUND)
+
+        return Response({'detail':'There are no issue book.'},status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request):
+        
+        try:
+            user = CustomUser.objects.get(username=request.user.username)
+            book = Book.objects.get(title=request.data['return_book_name'])
+
+            book_request_return_check = Book_request.objects.filter(book=book,user=request.user,type__request_name='Return')
+            book_request_lost_check = Book_request.objects.filter(book=book,user=request.user,type__request_name='Lost')
+
+            if book_request_return_check:
+                return Response({'derails':'Book return request already present.'},status=status.HTTP_208_ALREADY_REPORTED)
+            
+            if book_request_lost_check:
+                return Response({'derails':'Book lost request already present.'},status=status.HTTP_208_ALREADY_REPORTED)
+
+            book_user_check = Book_request_log.objects.get(book=book,user=request.user,type__request_name='Issue')
+            type = Book_request_type.objects.get(request_name="Lost")
+
+            today = date.today()
+            price = (today-book_user_check.expected_date_return)
+            charge = book.price
+            if price.days > 0:
+                charge += 10 * price.days
+
+            return_request = Book_request(book=book,date_issue=book_user_check.date_issue,\
+                date_return=book_user_check.expected_date_return,return_lost_request_date=date.today(),\
+                    user=user,type=type,charge=charge)
+            return_request.save()
+            return Response({'msg':'Book lost request sent successfully.'},status=status.HTTP_202_ACCEPTED)
 
         except:
             return Response({'error':'Book not Found.'},status=status.HTTP_404_NOT_FOUND)

@@ -13,6 +13,7 @@ class Role(models.Model):
     def __str__(self):
         return self.name
 
+# Maintain user 
 class CustomUser(AbstractUser):
     issued_book = models.IntegerField(default=0, validators=[
         MinValueValidator(0), MaxValueValidator(2)
@@ -40,15 +41,36 @@ class Book(models.Model):
     author = models.ForeignKey(Author,on_delete=models.CASCADE)
     genre = models.ManyToManyField(Genre)
     is_issued = models.BooleanField(default=False)
+    price = models.FloatField()
+    no_copy = models.IntegerField()
+    
 
     def __str__(self):
         return self.title
 
-class Book_issue(models.Model):
+class Book_request_type(models.Model):
+    request_name = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.request_name
+
+# Maintain current request only
+class Book_request(models.Model):
     book = models.ForeignKey(Book,on_delete=models.CASCADE)
-    date_issue = models.DateTimeField()
-    date_return = models.DateTimeField()
+    date_issue = models.DateField()
+    date_return = models.DateField()
+    return_lost_request_date = models.DateField(null=True) # Only for return request and Lost request
     user = models.ForeignKey(CustomUser,on_delete=CASCADE)
-    is_return = models.BooleanField(default=False)
+    type = models.ForeignKey(Book_request_type,on_delete=CASCADE)
+    charge = models.IntegerField(default=0)
+
+# Maintain request 
+class Book_request_log(models.Model):
+    book = models.ForeignKey(Book,on_delete=models.CASCADE)
+    date_issue = models.DateField()
+    expected_date_return = models.DateField()
+    actual_date_return = models.DateField(null=True)
+    user = models.ForeignKey(CustomUser,on_delete=CASCADE)
+    type = models.ForeignKey(Book_request_type,on_delete=CASCADE)
     charge = models.IntegerField(default=0)
 
