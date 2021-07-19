@@ -129,8 +129,8 @@ class BookSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Book
-        fields = ('id','title','author','author_name','genre','genre_type','is_issued','no_copy','price')
-        read_only_fields = ('is_issued',)
+        fields = ('id','title','author','author_name','genre','genre_type','no_copy','price')
+        # read_only_fields = ('is_issued',)
         extra_kwargs = {
             'author': {'write_only': True},
             'genre': {'write_only': True},

@@ -82,9 +82,13 @@ WSGI_APPLICATION = 'Library.wsgi.application'
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+     'default': {
+        'ENGINE': env('SQL_ENGINE'),
+        'NAME': env('SQL_DATABASE'),
+        'USER': env('SQL_USER'),
+        'PASSWORD': env('SQL_PASSWORD'),
+        'HOST': env('SQL_HOST'),
+        'PORT': env('SQL_PORT')
     }
 }
 

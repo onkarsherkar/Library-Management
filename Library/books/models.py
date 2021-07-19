@@ -40,7 +40,7 @@ class Book(models.Model):
     title = models.CharField(max_length=100,unique=True)
     author = models.ForeignKey(Author,on_delete=models.CASCADE)
     genre = models.ManyToManyField(Genre)
-    is_issued = models.BooleanField(default=False)
+    # is_issued = models.BooleanField(default=False)
     price = models.FloatField()
     no_copy = models.IntegerField()
     

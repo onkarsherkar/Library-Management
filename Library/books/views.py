@@ -76,13 +76,13 @@ class RoleView(APIView):
         else:
             roles = Role.objects.all()
         serializer = RoleSerializer(roles,many=True)
-        return Response(serializer.data)
+        return Response(serializer.data,status=status.HTTP_200_OK)
 
     def post(self, request):
         serializer= RoleSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response({'meesage':'Data added Successfully.'},status=status.HTTP_202_ACCEPTED)
+            return Response({'meesage':'Data added Successfully.'},status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)          
  
@@ -111,7 +111,7 @@ class RoleEditView(APIView):
 
         if role:
             serializer = RoleSerializer(role)
-            return Response(serializer.data)
+            return Response(serializer.data,status=status.HTTP_302_FOUND)
 
         return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
 
@@ -162,7 +162,7 @@ class RegisterView(APIView):
         else:
             user = CustomUser.objects.filter(type__name='Member')
         serializer = RegisterSerializer(user,many=True)
-        return Response(serializer.data)
+        return Response(serializer.data,status=status.HTTP_302_FOUND)
         
     def post(self,request):
         if request.user.is_staff:
@@ -194,7 +194,7 @@ class RegisterNewView(viewsets.ModelViewSet):
         else:
             user = CustomUser.objects.filter(~Q(type__name='Librarian'),is_superuser=False )
         serializer = RegisterSerializer(user,many=True)
-        return Response(serializer.data)
+        return Response(serializer.data,status=status.HTTP_302_FOUND)
 
     def create(self,request):
         if request.user.is_staff:
@@ -236,7 +236,7 @@ class LogoutView(APIView):
 
     def post(self,request):
         logout(request)
-        return Response({'data':'logout Successfully..'},status=status.HTTP_200_OK)
+        return Response({'data':'logout Successfully..'},status=status.HTTP_202_ACCEPTED)
 
 # Modify, Delete exisiting user
 class EditUserView(APIView):
@@ -301,13 +301,13 @@ class EditUserView(APIView):
 
 # Add book Auther
 class AuthorView(APIView):
-    permission_classes = [IsLibrarian]
+    permission_classes = [IsLibrarian|IsAdminUser]
     serializer_class = AuthorSerializer
 
     def get(self,request):
         author = Author.objects.all()
         serializer = AuthorSerializer(author,many=True)
-        return Response(serializer.data)
+        return Response(serializer.data,status=status.HTTP_302_FOUND)
 
     def post(self,request):
         serializer = AuthorSerializer(data=request.data)
@@ -427,7 +427,7 @@ class BookView(APIView):
     def get(self,request):
         books = Book.objects.all()
         serializer = BookSerializer(books,many=True)
-        return Response(serializer.data)
+        return Response(serializer.data,status=status.HTTP_302_FOUND)
 
     def post(self,request):
         serializer = BookSerializer(data=request.data)
@@ -778,9 +778,9 @@ class IssuedBookView(APIView):
         books =Book_request_log.objects.all()
         response = HttpResponse(content_type='text/csv')
         writer = csv.writer(response)
-        writer.writerow(['Book Title','Book Author','Member Name','Date Of Issue','Date of Return','is_return','is_lost','charge'])
+        writer.writerow(['Book Title','Book Author','Member Name','Date Of Issue','Date of Return','Actual Date Return','Request Type','charge'])
         if books:
-            for book in books.values_list('book__title','book__author__name','user__username','date_issue','date_return','is_return','is_lost','charge'):
+            for book in books.values_list('book__title','book__author__name','user__username','date_issue','expected_date_return','actual_date_return','type__request_name','charge'):
                 writer.writerow(book)
             response['Content-Disposition'] = 'attachment; filename="book_issued.csv"'
             return response

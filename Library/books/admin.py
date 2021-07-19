@@ -20,7 +20,7 @@ class role_inline(admin.TabularInline):
     extra = 1
 
 class BooksAdmin(admin.ModelAdmin):
-    list_display = ('id','title','author','is_issued','price','no_copy')
+    list_display = ('id','title','author','price','no_copy')
 
 class BookIssueAdmin(admin.ModelAdmin):
     list_display = ('id','book','date_issue','expected_date_return','actual_date_return','user','type','charge')
