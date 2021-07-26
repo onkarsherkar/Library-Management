@@ -150,8 +150,7 @@ class AddBookTestcase(APITestCase):
             'title':'Naryan K',
             'author':1,
             'genre':[1,2],
-            'price':1000,
-            'no_copy':5
+            'price':1000
         }
         response = self.client.post(self.list_url,data)
         self.assertEqual(response.status_code,status.HTTP_201_CREATED)

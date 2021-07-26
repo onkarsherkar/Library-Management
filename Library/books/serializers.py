@@ -1,13 +1,16 @@
+from enum import unique
 from django.db import models
 from django.db.models import fields,Q
 from django.db.models.base import Model
 from rest_framework import serializers
 from rest_framework import validators
-from .models import Book_request, Role, CustomUser, Author, Genre, Book, Book_request_log,Book_request_type
+from rest_framework.relations import PrimaryKeyRelatedField
+from .models import Book_request, Role, CustomUser, Author, Genre, Book,Unique_identifier ,Book_request_log,Book_request_type
 from rest_framework.validators import UniqueValidator
 from datetime import date, datetime
 from django.contrib.auth.hashers import make_password
 from collections import OrderedDict
+from django.utils.timezone import now
 
 # serializer for Role 
 class RoleSerializer(serializers.ModelSerializer):
@@ -54,8 +57,9 @@ class RegisterMemberSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=True, validators=[UniqueValidator(queryset=CustomUser.objects.all())])
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     confirm_password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
-    type = serializers.PrimaryKeyRelatedField(required=True,queryset=Role.objects.filter(~Q(name='Librarian')))
+    type = serializers.PrimaryKeyRelatedField(write_only=True,required=True,queryset=Role.objects.filter(~Q(name='Librarian')))
     type_name = serializers.ReadOnlyField(source='type.name')
+
     class Meta:
         model = CustomUser
         fields = ('id','username', 'password', 'confirm_password', 'email','type','type_name')
@@ -129,12 +133,39 @@ class BookSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Book
-        fields = ('id','title','author','author_name','genre','genre_type','no_copy','price')
+        fields = ('id','title','author','author_name','genre','genre_type','price')
         # read_only_fields = ('is_issued',)
         extra_kwargs = {
             'author': {'write_only': True},
             'genre': {'write_only': True},
         }
+
+# Unique serializer
+class UniqeIdentifierSerializer(serializers.ModelSerializer):
+
+    book_name = serializers.ReadOnlyField(source='book.title')
+
+    class Meta:
+
+        model = Unique_identifier
+        fields = ('id','book','book_name','unique_no','is_issue','is_lost')
+        read_only_fields = ('is_issue','is_lost')
+        extra_kwargs = {
+            'book': {'write_only': True},
+        #     'genre': {'write_only': True},
+        }
+
+# Unique edit serializer
+class UniqeIdentifierEditSerializer(serializers.ModelSerializer):
+    issue_book =serializers.ReadOnlyField(source='is_issue')
+    lost_book =serializers.ReadOnlyField(source='is_lost')
+    class Meta:
+        model = Unique_identifier
+        fields = ('id','book','unique_no','issue_book','lost_book','is_issue','is_lost')
+        extra_kwargs = {
+            'is_issue': {'write_only': True},
+            'is_lost': {'write_only': True},
+        }        
 
 # Book Search by author
 class BookSearchByAuthorSerializer(serializers.ModelSerializer):
@@ -173,6 +204,7 @@ class BookRequestSerializer(serializers.ModelSerializer):
     user_name = serializers.ReadOnlyField(source='user.username',read_only=True)
     request_type = serializers.ReadOnlyField(source='type.request_name',read_only=True)
     user = serializers.PrimaryKeyRelatedField(write_only=True,queryset=CustomUser.objects.filter(~Q(type=None)))
+    
     class Meta:
         model = Book_request
         fields = ('id','book_name','book','date_issue','date_return','return_lost_request_date','user_name','user','request_type','type','charge')
@@ -183,30 +215,49 @@ class BookRequestSerializer(serializers.ModelSerializer):
             'type': {'write_only': True}
         }
 
+class CustomIdentifier(serializers.ModelSerializer):
+    class Meta:
+        model = Unique_identifier
+        fields = ('unique_no',)
+
 # Add, Delete serializer request
 class BookRequestAddEditSerializer(serializers.ModelSerializer):
+    
+    present_book_uid = serializers.SerializerMethodField()
+
     book_name = serializers.ReadOnlyField(source='book.title')
     user_name = serializers.ReadOnlyField(source='user.username',read_only=True)
     request_type = serializers.ReadOnlyField(source='type.request_name',read_only=True)
     user = serializers.PrimaryKeyRelatedField(write_only=True,queryset=CustomUser.objects.filter(~Q(type=None)))
+    unique_identifier = serializers.CharField(write_only=True,min_length=10,max_length=10,allow_blank=False,required=True)
     
-
     class Meta:
         model = Book_request
-        fields = ('id','book_name','book','date_issue','date_return','user_name','user','request_type','type')
+        fields = ('id','book_name','book','present_book_uid','unique_identifier','date_issue','date_return','user_name','user','request_type','type','charge')
         extra_kwargs = {
             'book': {'write_only': True},
             'user': {'write_only': True},
-            'type': {'write_only': True}
+            'type': {'write_only': True},
+            
         }
+    
+    def get_present_book_uid(self, obj):
+        if obj.type.request_name == 'Issue':
+            selected_options = Unique_identifier.objects.filter(book=obj.book,is_issue=False)
+        else:
+            get_unique_no = Book_request_log.objects.get(book=obj.book,user=obj.user,type__request_name='Issue')
+            selected_options = Unique_identifier.objects.filter(book=obj.book,unique_no=get_unique_no.unique_id,is_issue=True)
+        return CustomIdentifier(selected_options,many=True).data
 
 # Return, Lost, Issue Book Request serializer
 class BookIssueSerializer(serializers.ModelSerializer):
+
     book_name = serializers.ReadOnlyField(source='book.title')
     user_name = serializers.ReadOnlyField(source='user.username',read_only=True)
-    return_book_name = serializers.CharField(write_only=True)
+    enter_book_name = serializers.CharField(write_only=True)
 
     class Meta:
         model = Book_request_log
-        fields = ('book_name','date_issue','expected_date_return','user_name','charge','return_book_name',)
+        fields = ('book_name','date_issue','expected_date_return','user_name','charge','enter_book_name',)
         read_only_fields = ('date_issue','expected_date_return','charge')
+        

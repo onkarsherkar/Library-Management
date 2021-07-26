@@ -23,6 +23,10 @@ urlpatterns = [
     path('genre/<int:id>',views.GenreEditView.as_view(),name='genre-edit'),
     path('books',views.BookView.as_view(),name='books'),
     path('book/<int:id>',views.BookEditView.as_view(),name='book-edit'),
+    # 
+    path('book/unique_identifier',views.UniqueIdentifierView.as_view(),name='unique-idnetifier'),
+    path('book/unique_identifier/<int:id>',views.EditUniqueIdentifier.as_view(),name='unique-idnetifier-edit'),
+    # 
     path('book/authors',views.BookSearchByAuthor.as_view(),name='book-author'),
     path('book/genres',views.BookSearchByGenre.as_view(),name='book-genre'),
     path('book/request-type',views.BookRequestTypeView.as_view(),name='book-request-type'),

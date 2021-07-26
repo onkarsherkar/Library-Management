@@ -1,12 +1,13 @@
+from enum import unique
 from django.db.models.fields import DateTimeField
 from django.http.response import JsonResponse
 from django.shortcuts import render
 from django.http.response import JsonResponse,HttpResponse
 from rest_framework import permissions, serializers
-from .serializers import BookIssueSerializer, BookRequestSerializer, GetBookSerializer,RoleSerializer, RegisterSerializer, RegisterMemberSerializer, EditUserSerializer, LoginSerializer, AuthorSerializer,GenreSerializer, BookSerializer, BookSearchByAuthorSerializer, BookSearchByGenreSerializer, BookRequestTypeSerializer, \
-BookRequestSerializer, BookRequestAddEditSerializer
+from .serializers import BookIssueSerializer,UniqeIdentifierSerializer, UniqeIdentifierEditSerializer,BookRequestSerializer, GetBookSerializer,RoleSerializer, RegisterSerializer, RegisterMemberSerializer, EditUserSerializer, LoginSerializer, AuthorSerializer,GenreSerializer, BookSerializer, BookSearchByAuthorSerializer, BookSearchByGenreSerializer, BookRequestTypeSerializer,\
+BookRequestAddEditSerializer
 from rest_framework import generics
-from .models import Book_request, CustomUser,Author,Genre, Book, Role, Book_request_log, Book_request_type
+from .models import Book_request, CustomUser,Author,Genre, Book, Role, Book_request_log, Book_request_type, Unique_identifier
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -34,18 +35,24 @@ class IsLibrarian(BasePermission):
     def has_permission(self,request,view):
         if request.user.is_authenticated:
             current_user = request.user
-            if current_user.type.name == 'Librarian':
-                return True
-            return False
+            try:
+                if current_user.type.name == 'Librarian':
+                    return True
+                return False
+            except:
+                return False
         return False
 
 class IsMember(BasePermission):
     def has_permission(self,request,view):
         if request.user.is_authenticated:
             current_user = request.user
-            if current_user.type.name == 'Member':
-                return True
-            return False
+            try:
+                if current_user.type.name == 'Member':
+                    return True
+                return False
+            except:
+                return False
         return False
 
 class IsAnonymous(BasePermission):
@@ -438,9 +445,70 @@ class BookView(APIView):
 
         return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
 
+# Add unique Identifier
+class UniqueIdentifierView(APIView):
+    permission_classes = [IsLibrarian]
+    serializer_class = UniqeIdentifierSerializer
+
+    def get(self,request):
+        unique_identifier = Unique_identifier.objects.all()
+        serializer = UniqeIdentifierSerializer(unique_identifier,many=True)
+        return Response(serializer.data,status=status.HTTP_302_FOUND)
+
+    def post(self,request):
+        serializer = UniqeIdentifierSerializer(data=request.data)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data,status=status.HTTP_201_CREATED)
+
+        return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+
+# Edit unique Identifier
+class EditUniqueIdentifier(APIView):
+    permission_classes = [IsLibrarian]
+    serializer_class = UniqeIdentifierEditSerializer
+
+    def get_object(self,id):
+        try:
+            data = Unique_identifier.objects.get(id=id)
+            return data
+
+        except Unique_identifier.DoesNotExist:
+            return None
+
+    def get(self,request,id):
+        unique_identifier = self.get_object(id)
+        if unique_identifier:
+            serializer = UniqeIdentifierEditSerializer(unique_identifier)
+            return Response(serializer.data)
+
+        return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
+    def put(self,request,id):
+        unique_identifier = self.get_object(id)
+        if unique_identifier:
+            serializer = UniqeIdentifierEditSerializer(unique_identifier,data=request.data) 
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data,status=status.HTTP_202_ACCEPTED)
+
+            return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self,request,id):
+        def delete(self,request,id):
+            data = self.get_object(id)
+            if data:
+                data.delete()
+                return Response(status=status.HTTP_202_ACCEPTED)
+
+            return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
+
 # Modify,Delete exisiting book
 class BookEditView(APIView):
-    permission_classes = [IsAdminUser|IsLibrarian]
+    permission_classes = [IsAdminUser | IsLibrarian]
     serializer_class = BookSerializer
 
     def get_object(self,id):
@@ -589,17 +657,28 @@ class AvailableBookView(APIView):
 
    
     def get(self,request):
-        books = Book.objects.filter(no_copy__gt=0)
-        serializer = GetBookSerializer(books,many=True)
-        return Response(serializer.data,status=status.HTTP_200_OK)
+        book_list = Unique_identifier.objects.filter(is_issue=False).values_list('book',flat=True).distinct()
+        data_list = []
+        if book_list:
+            for info in book_list:
+                data_list.append(info)
+
+            books = Book.objects.filter(id__in=data_list)
+            serializer = GetBookSerializer(books,many=True)
+
+            return Response(serializer.data,status=status.HTTP_200_OK)
+            
+        return Response(request.data,status=status.HTTP_204_NO_CONTENT)
 
     def post(self,request):
             
         user = request.user
         try:
             book = Book.objects.get(title=request.data['title'])
+            book_get = Unique_identifier.objects.filter(book=book,is_issue=False)
             if user.issued_book < 2:
-                if book.no_copy > 0:
+                # if book.no_copy > 0:
+                if book_get:
                     
                     type = Book_request_type.objects.get(request_name="Issue")
 
@@ -676,13 +755,14 @@ class BookRequestAddEditView(APIView):
     def get(self,request,id):
         request_info = self.get_object(id)
         if request_info:
-            serializer = BookRequestSerializer(request_info)
+            serializer = BookRequestAddEditSerializer(request_info)
             return Response(serializer.data)
 
         return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
 
     def put(self,request,id):
         request_info = self.get_object(id)
+
         if request_info:
 
             if request.data['book'] == str(request_info.book.id) \
@@ -696,49 +776,66 @@ class BookRequestAddEditView(APIView):
                     book = Book.objects.get(id=request_info.book.id)
 
                     if request_info.type.request_name == 'Issue':
+
+                        try:
+                            unique_identifier_data = Unique_identifier.objects.get(book=book,unique_no=request.data['unique_identifier'],is_issue=False,is_lost=False)
+                        except Exception as e:
+                            print('Error:',e)
+                            return Response({'error':'Unique no of book is not match'},status=status.HTTP_400_BAD_REQUEST)
+
                         book_request = Book_request_log(
                             book=request_info.book,
+                            unique_id = unique_identifier_data,
                             date_issue=request.data['date_issue'],
                             expected_date_return=request.data['date_return'],
                             user=request_info.user
                         )
-                        book.no_copy -=1
+                        # book.no_copy -=1
                         user.issued_book +=1 
                         book_request.type = request_info.type
                         book_request.save()
+                        unique_identifier_data.is_issue = True
+                        unique_identifier_data.save()
                         request_info.delete()
                         msg = "Book issued successfully."
 
                     if request_info.type.request_name == "Return":
-                        book_request = Book_request_log.objects.get(book=book,user=user)
-                        book.no_copy += 1
+                        book_request = Book_request_log.objects.get(book=book,user=user,type__request_name='Issue')
+                        unique_identifier_data = Unique_identifier.objects.get(book=book,unique_no=request.data['unique_identifier'],is_issue=True)
+                        # book.no_copy += 1
                         user.issued_book -= 1
                         today = date.today()
                         price = (today-book_request.expected_date_return)
 
                         if price.days > 0:
                             charge = 10 * price.days
-                            book_request.charge = charge
+                            # book_request.charge = charge
                         book_request.type = request_info.type
                         book_request.actual_date_return = request_info.return_lost_request_date
+                        book_request.charge = request.data['charge']
                         book_request.save()
+                        unique_identifier_data.is_issue = False
+                        unique_identifier_data.save()
                         request_info.delete()
                         msg = "Book Return successfully."
 
-                    
                     if request_info.type.request_name == "Lost":
-                        book_request = Book_request_log.objects.get(book=book,user=user)
+                        book_request = Book_request_log.objects.get(book=book,user=user,type__request_name='Issue')
+                        unique_identifier_data = Unique_identifier.objects.get(book=book,unique_no=request.data['unique_identifier'],is_issue=True)
                         user.issued_book -= 1
                         today = date.today()
                         price = (today-book_request.expected_date_return)
 
                         if price.days > 0:
                             charge = 10 * price.days
-                            book_request.charge = charge
+                            # book_request.charge = charge
                         book_request.charge += book_request.book.price
                         book_request.type = request_info.type
                         book_request.actual_date_return = request_info.return_lost_request_date
+                        book_request.charge = request.data['charge']
                         book_request.save()
+                        unique_identifier_data.is_lost = True
+                        unique_identifier_data.save()
                         request_info.delete()
                         msg = "Book is Lost and total amount paid."
                         
@@ -778,9 +875,9 @@ class IssuedBookView(APIView):
         books =Book_request_log.objects.all()
         response = HttpResponse(content_type='text/csv')
         writer = csv.writer(response)
-        writer.writerow(['Book Title','Book Author','Member Name','Date Of Issue','Date of Return','Actual Date Return','Request Type','charge'])
+        writer.writerow(['Book Title','Book Author','Book Unique Id','Member Name','Date Of Issue','Date of Return','Actual Date Return','Request Type','charge'])
         if books:
-            for book in books.values_list('book__title','book__author__name','user__username','date_issue','expected_date_return','actual_date_return','type__request_name','charge'):
+            for book in books.values_list('book__title','book__author__name','unique_id__unique_no','user__username','date_issue','expected_date_return','actual_date_return','type__request_name','charge'):
                 writer.writerow(book)
             response['Content-Disposition'] = 'attachment; filename="book_issued.csv"'
             return response
@@ -822,6 +919,7 @@ class ReturnBookView(APIView):
                     charge = 10 * price.days
                    
                 info['book_name'] = data.book.title
+                info['unique_id'] = data.unique_id.unique_no
                 info['date_issue'] = data.date_issue
                 info['date_return'] = data.expected_date_return
                 info['user_name'] = data.user.username
@@ -836,7 +934,7 @@ class ReturnBookView(APIView):
         
         try:
             user = CustomUser.objects.get(username=request.user.username)
-            book = Book.objects.get(title=request.data['return_book_name'])
+            book = Book.objects.get(title=request.data['enter_book_name'])
 
             book_request_return_check = Book_request.objects.filter(book=book,user=request.user,type__request_name='Return')
             book_request_lost_check = Book_request.objects.filter(book=book,user=request.user,type__request_name='Lost')
@@ -900,6 +998,7 @@ class LostBookView(APIView):
                     charge += 10 * price.days
                    
                 info['book_name'] = data.book.title
+                info['unique_id'] = data.unique_id.unique_no
                 info['date_issue'] = data.date_issue
                 info['date_return'] = data.expected_date_return
                 info['user_name'] = data.user.username
@@ -914,7 +1013,7 @@ class LostBookView(APIView):
         
         try:
             user = CustomUser.objects.get(username=request.user.username)
-            book = Book.objects.get(title=request.data['return_book_name'])
+            book = Book.objects.get(title=request.data['enter_book_name'])
 
             book_request_return_check = Book_request.objects.filter(book=book,user=request.user,type__request_name='Return')
             book_request_lost_check = Book_request.objects.filter(book=book,user=request.user,type__request_name='Lost')
