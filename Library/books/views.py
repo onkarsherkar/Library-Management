@@ -153,34 +153,6 @@ class RoleEditView(APIView):
 
         return Response({'error':'No data Found'},status=status.HTTP_404_NOT_FOUND)
 
-class RegisterView(APIView):
-    
-    serializer_class = RegisterSerializer
-    permission_classes = [IsAdminUser|IsLibrarian]
-
-    def get_serializer_class(self):
-        if self.request.user.is_staff == True:
-            return RegisterSerializer
-        return RegisterMemberSerializer
-    
-    def get(self,request):
-        if request.user.is_staff:
-            user = CustomUser.objects.filter(is_superuser=False)
-        else:
-            user = CustomUser.objects.filter(type__name='Member')
-        serializer = RegisterSerializer(user,many=True)
-        return Response(serializer.data,status=status.HTTP_302_FOUND)
-        
-    def post(self,request):
-        if request.user.is_staff:
-            serializer= RegisterSerializer(data=request.data)
-        else:
-            serializer= RegisterMemberSerializer(data=request.data)
-
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data,status=status.HTTP_201_CREATED)
-        return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
 
 # Display exisiting user and register new user
 class RegisterNewView(viewsets.ModelViewSet):

@@ -13,7 +13,6 @@ urlpatterns = [
     path('test',views.test,name='test_check'),
     path('roles',views.RoleView.as_view(),name='role'),
     path('role/<int:id>',views.RoleEditView.as_view(),name='edit-role'),
-    # path('signup',views.RegisterView.as_view(),name='signup'),
     path('login',views.LoginView.as_view(),name='login'),
     path('logout',views.LogoutView.as_view(),name='logout'),
     path('user/<int:id>',views.EditUserView.as_view(),name='user-edit'),
@@ -23,10 +22,8 @@ urlpatterns = [
     path('genre/<int:id>',views.GenreEditView.as_view(),name='genre-edit'),
     path('books',views.BookView.as_view(),name='books'),
     path('book/<int:id>',views.BookEditView.as_view(),name='book-edit'),
-    # 
     path('book/unique_identifier',views.UniqueIdentifierView.as_view(),name='unique-idnetifier'),
     path('book/unique_identifier/<int:id>',views.EditUniqueIdentifier.as_view(),name='unique-idnetifier-edit'),
-    # 
     path('book/authors',views.BookSearchByAuthor.as_view(),name='book-author'),
     path('book/genres',views.BookSearchByGenre.as_view(),name='book-genre'),
     path('book/request-type',views.BookRequestTypeView.as_view(),name='book-request-type'),
